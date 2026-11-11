@@ -39,15 +39,15 @@ class Living : Level("living", "客厅", "主人上班去了！三分钟后他�
         prop(Prop("sofa", Kind.SOLID, P(0.0, -0.37), "sofa", 0.3, block = footprint(P(0.0, -0.37), 0.15, 0.08), tall = true, label = "沙发"))
         prop(Prop("pillow", Kind.BITE, P(-0.07, -0.33), "pillow", 0.08, spot = P(-0.07, -0.22), seconds = 2.0, label = "靠垫"))
         prop(Prop("sofagap", Kind.DROP, P(0.08, -0.3), "", 0.06, spot = P(0.08, -0.22), mischief = false, label = "沙发缝"))
-        prop(Prop("teatable", Kind.SOLID, P(0.0, -0.02), "teatable", 0.24, block = footprint(P(0.0, -0.02), 0.12, 0.07), label = "茶几"))
-        prop(Prop("stool", Kind.PUSH, P(0.48, 0.22), "stool", 0.07, spot = P(0.52, 0.27), seconds = 2.0, goal = P(0.17, 0.02), mischief = false, label = "小凳子"))
+        prop(Prop("teatable", Kind.SOLID, P(0.0, -0.02), "teatable", 0.24, block = footprint(P(0.0, -0.02), 0.12, 0.095), label = "茶几"))
+        prop(Prop("stool", Kind.PUSH, P(0.42, 0.08), "stool", 0.07, spot = P(0.5, 0.09), seconds = 2.0, goal = P(0.17, 0.02), mischief = false, label = "小凳子"))
         prop(Prop("baozi", Kind.EAT, P(0.06, -0.02), "baozi", 0.06, spot = P(0.2, 0.06), seconds = 2.0, needs = "stool", label = "包子", lift = 0.065))
-        prop(Prop("remote", Kind.CARRY, P(-0.06, 0.06), "remote", 0.04, spot = P(-0.06, 0.12), seconds = 0.8, label = "遥控器"))
+        prop(Prop("remote", Kind.CARRY, P(-0.24, 0.1), "remote", 0.04, spot = P(-0.24, 0.17), seconds = 0.8, label = "遥控器"))
         prop(Prop("tissue", Kind.TRAIL, P(-0.7, -0.38), "tissue", 0.05, spot = P(-0.62, -0.32), seconds = 1.2, label = "卫生纸"))
         prop(Prop("tv", Kind.SOLID, P(-0.7, 0.08), "tvstand", 0.3, block = footprint(P(-0.7, 0.08), 0.07, 0.16), yaw = 90.0, label = "电视柜"))
-        prop(Prop("vase", Kind.KNOCK, P(0.36, 0.36), "vase", 0.06, knockable = true, label = "花瓶"))
-        prop(Prop("books", Kind.KNOCK, P(0.5, 0.36), "books", 0.06, knockable = true, label = "一摞书"))
-        prop(Prop("plant", Kind.KNOCK, P(0.64, 0.36), "plant", 0.07, knockable = true, label = "盆栽"))
+        prop(Prop("vase", Kind.KNOCK, P(0.3, 0.38), "vase", 0.06, knockable = true, label = "花瓶"))
+        prop(Prop("books", Kind.KNOCK, P(0.5, 0.38), "books", 0.06, knockable = true, label = "一摞书"))
+        prop(Prop("plant", Kind.KNOCK, P(0.7, 0.38), "plant", 0.07, knockable = true, label = "盆栽"))
         build(P(0.0, 0.3))
         owner.present = false
         owner.at = P(0.75, -0.45)
@@ -143,7 +143,8 @@ class Kitchen : Level("kitchen", "厨房", "主人背对着你在包饺子，时
         prop(Prop("pin", Kind.CARRY, P(-0.2, -0.33), "pin", 0.1, spot = P(-0.2, -0.25), seconds = 1.6, label = "擀面杖"))
         prop(Prop("balcony", Kind.DROP, P(0.7, 0.32), "", 0.1, spot = P(0.62, 0.3), mischief = false, label = "阳台"))
         prop(Prop("shelf", Kind.SOLID, P(-0.66, -0.33), "shelf", 0.14, block = footprint(P(-0.66, -0.33), 0.07, 0.05), label = "架子"))
-        prop(Prop("flour", Kind.KNOCK, P(-0.6, -0.25), "flour", 0.07, knockable = true, label = "面粉"))
+        // v0.2: 5 cm off the shelf, so a dash reaches it now that the dog keeps clear of furniture.
+        prop(Prop("flour", Kind.KNOCK, P(-0.6, -0.2), "flour", 0.07, knockable = true, label = "面粉"))
         build(P(0.0, 0.3))
         owner.at = P(0.0, -0.32)
         owner.heading = 0.0
@@ -397,9 +398,9 @@ class Yard : Level("yard", "东北小院", "下雪了！刨出雪里埋的 3 根
     var scentLeft = 0.0
 
     init {
-        prop(Prop("cottage", Kind.SOLID, P(0.0, -0.42), "cottage", 0.6, block = footprint(P(0.0, -0.42), 0.3, 0.07), tall = true, label = "屋子"))
-        prop(Prop("doghouse", Kind.SOLID, P(-0.62, -0.25), "doghouse", 0.16, block = footprint(P(-0.62, -0.25), 0.07, 0.06), label = "狗窝"))
-        val mounds = listOf(P(-0.5, 0.05), P(-0.28, 0.3), P(-0.05, -0.15), P(0.15, 0.18), P(0.36, -0.12), P(0.6, 0.22), P(0.68, -0.2))
+        prop(Prop("cottage", Kind.SOLID, P(0.0, -0.42), "cottage", 0.6, block = footprint(P(0.0, -0.42), 0.32, 0.19), tall = true, label = "屋子"))
+        prop(Prop("doghouse", Kind.SOLID, P(-0.62, -0.25), "doghouse", 0.16, block = footprint(P(-0.62, -0.25), 0.095, 0.085), label = "狗窝"))
+        val mounds = listOf(P(-0.5, 0.05), P(-0.28, 0.3), P(-0.05, -0.15), P(0.15, 0.18), P(0.36, -0.12), P(-0.62, 0.32), P(0.68, -0.2))
         mounds.forEachIndexed { k, p -> prop(Prop("m${k + 1}", Kind.DIG, p, "mound", 0.07, spot = p + P(0.0, 0.06), seconds = 1.8, mischief = false, label = "雪堆")) }
         prop(Prop("sled", Kind.CARRY, P(-0.3, -0.18), "sled", 0.12, spot = P(-0.3, -0.1), seconds = 0.8, mischief = false, label = "雪橇"))
         val gates = listOf(P(0.0, 0.05), P(0.45, 0.05), P(0.45, 0.38), P(-0.1, 0.38))
@@ -659,7 +660,7 @@ class Home : Level("home", "回家", "钥匙声！主人还有 90 秒到家：�
     init {
         prop(Prop("sofa", Kind.SOLID, P(0.0, -0.37), "sofa", 0.3, block = footprint(P(0.0, -0.37), 0.15, 0.08), tall = true, label = "沙发"))
         prop(Prop("feathers", Kind.CLEAN, P(-0.2, -0.15), "feathers", 0.12, spot = P(-0.2, -0.08), seconds = 2.0, mischief = false, label = "一地羽毛"))
-        prop(Prop("paper", Kind.CLEAN, P(-0.5, 0.1), "paper", 0.15, spot = P(-0.5, 0.18), seconds = 2.6, mischief = false, label = "卫生纸"))
+        prop(Prop("paper", Kind.CLEAN, P(-0.3, 0.15), "paper", 0.15, spot = P(-0.3, 0.23), seconds = 2.6, mischief = false, label = "卫生纸"))
         prop(Prop("prints", Kind.CLEAN, P(0.3, 0.0), "prints", 0.12, spot = P(0.3, 0.08), seconds = 2.0, mischief = false, label = "面粉脚印"))
         prop(Prop("shards", Kind.SOLID, P(0.55, 0.3), "shards", 0.08, label = "花瓶碎片"))
         prop(Prop("cat", Kind.PUSH, P(-0.6, -0.3), "cat", 0.1, spot = P(-0.6, -0.22), seconds = 2.2, goal = P(0.5, 0.24), mischief = false, label = "猫"))

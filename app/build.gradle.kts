@@ -14,8 +14,8 @@ android {
         applicationId = "com.vrgames.husky"
         minSdk = 35
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 5
+        versionName = "0.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters.add("arm64-v8a") }

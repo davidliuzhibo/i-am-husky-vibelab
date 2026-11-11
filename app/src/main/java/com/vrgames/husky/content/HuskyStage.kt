@@ -102,7 +102,7 @@ fun HuskyStage() {
         val f = id.split(":")
         when {
             l == null -> Unit
-            f[0] == "tile" -> view?.tileCenter(l, f[1].toInt(), f[2].toInt())?.let { Game.tapTile(it) }
+            f[0] == "tile" -> view?.tileCenter(l, f[1].toInt(), f[2].toInt())?.let { Game.tapTile(it, seat.eyeInDiorama()) }
             f[0] == "prop" -> Game.tapProp(f[1])
             f[0] == "husky" || f[0] == "roe" -> Game.tapAnimal(f[0])
         }
@@ -299,6 +299,7 @@ fun HuskyStage() {
                 synchronized(Game.lock) {
                     val l = Game.level
                     if (l != null) v.sync(l, Game.dashMode || Game.dogMark > 0, (l as? Yard)?.scent)
+                    if (l != null) v.dogView(l, Game.dogView && Game.phase == Game.Phase.PLAYING, dt)
                     if (Game.phase == Game.Phase.DREAM) v.dream(Game.dreamTime)
                 }
                 v.frame(dt)
@@ -366,6 +367,20 @@ private class Seat {
         headings.clear()
     }
 
+    /** The eye, last seen, in the diorama frame (floor at 0, +z toward the player); where it sat when placed until then. */
+    fun eyeInDiorama(): com.vrgames.husky.core.Vec3 {
+        val e = lastEye
+        if (!placed || e == null || Game.debugView != null) return com.vrgames.husky.core.Vec3(0.0, (1.2 - FLOOR_Y).toDouble(), AHEAD.toDouble())
+        // Into the world's frame (turned by [facing] about the eye's foot), then into the diorama's.
+        val dx = (e.x - origin.x).toDouble(); val dy = (e.y - origin.y).toDouble(); val dz = (e.z - origin.z).toDouble()
+        val a = Math.toRadians(-facing.toDouble())
+        val wx = dx * cos(a) + dz * sin(a)
+        val wz = -dx * sin(a) + dz * cos(a)
+        return com.vrgames.husky.core.Vec3(wx, dy - FLOOR_Y, wz + AHEAD)
+    }
+    private var lastEye: Vector3? = null
+    private var origin = Vector3(0f, 0f, 0f)
+
     /** A hand motion in the room as (x, z) on the diorama. */
     fun toDiorama(dx: Double, dz: Double): Pair<Double, Double> {
         val a = Math.toRadians(-facing.toDouble())
@@ -373,6 +388,7 @@ private class Seat {
     }
 
     fun frame(eye: Vector3?, rot: Quat?) {
+        if (eye != null) lastEye = eye
         val d = Game.debugView?.split(",")?.mapNotNull { it.trim().toFloatOrNull() }
         if (d != null && d.size >= 6) {
             diorama?.setPos(Vector3(d[0], d[1], d[2]))
@@ -391,7 +407,10 @@ private class Seat {
         facing = Math.toDegrees(atan2(s, c)).toFloat()
         placed = true
         world?.let {
-            it.setPos(Vector3(eye.x, 0f, eye.z))
+            // Measured from the eye (taken as 1.2 m above a seated player's floor), not from the room's origin, which is
+            // not always the floor on the device (a fixed height put 鲁班's bench almost on the floor, 2026-11-10).
+            origin = Vector3(eye.x, eye.y - 1.2f, eye.z)
+            it.setPos(origin)
             it.transform().eulerAngles = EulerAngles(0f, facing, 0f)
         }
         diorama?.setPos(Vector3(0f, FLOOR_Y, -AHEAD))
@@ -401,7 +420,7 @@ private class Seat {
     }
 
     companion object {
-        // Low enough that a hand in the lap points down at the far things, not across the near ones.
+        // 0.75 m below the eye: low enough that a hand in the lap points down at the far things, not across the near ones.
         const val FLOOR_Y = 0.45f
         // The diorama is 1 m deep: its near edge 0.65 m out, past a seated player's knees.
         const val AHEAD = 1.15f

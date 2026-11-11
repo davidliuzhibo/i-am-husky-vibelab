@@ -45,6 +45,13 @@ object Game {
     var noteVersion by mutableIntStateOf(0); private set
     /** The next pinch on the floor or a thing sends the husky dashing there. */
     var dashMode by mutableStateOf(false)
+    /** 狗狗视角 (v0.2): the room grown round the dog, the player right behind it; the button toggles it. */
+    var dogView by mutableStateOf(false)
+
+    fun toggleDogView() {
+        dogView = !dogView
+        version++
+    }
     /** Seconds the ring at the dog's feet still shows that the pinch reached it. */
     var dogMark = 0.0; private set
     private const val DOG_MARK_SECONDS = 4.0
@@ -136,7 +143,7 @@ object Game {
 
     // ---- Commands from the stage ----
 
-    fun tapTile(p: P) = act { l ->
+    fun tapTile(p: P, eye: com.vrgames.husky.core.Vec3? = null) = act { l ->
         dogMark = 0.0
         val roe = l.roe
         when {
@@ -147,7 +154,7 @@ object Game {
             // He is about to look: a pinch by the dog is for the dog, whatever else is near.
             l.owner.present && l.owner.warning > 0 && l.husky.at.dist(p) < ANIMAL_NEAR -> tapAnimal("husky")
             // A thing near the pinch comes first; otherwise a near miss on an animal is a pinch on it.
-            l.aimedAt(p) != null -> l.tapAt(p)
+            l.aimedAt(p, eye) != null -> l.tapAt(p, eye)
             roe != null && roe.at.dist(p) < ANIMAL_NEAR -> tapAnimal("roe")
             l.husky.at.dist(p) < ANIMAL_NEAR -> tapAnimal("husky")
             else -> l.tapAt(p)
@@ -221,6 +228,7 @@ object Game {
             solver?.update(dt)
             l.step(dt)
         }
+        deedSounds(l, dt)
         var changed = false
         for (e in evs) {
             changed = true
@@ -230,11 +238,34 @@ object Game {
                 is Ev.Warn -> sound?.play(Sfx.WARN)
                 is Ev.GoalMet -> { sound?.play(Sfx.GOAL); if (note == null) say("完成：${e.text}") }
                 is Ev.Did -> {
-                    sound?.play(Sfx.DID)
+                    val at = l.props[e.prop]?.pos ?: l.husky.at
+                    sound?.play(
+                        when (e.kind) {
+                            Kind.BITE -> Sfx.TEAR
+                            Kind.EAT -> Sfx.CHOMP
+                            Kind.CARRY, Kind.TRAIL -> Sfx.GRAB
+                            Kind.PUSH -> Sfx.SCRAPE
+                            Kind.DIG -> Sfx.DIG
+                            Kind.CLEAN -> Sfx.SWEEP
+                            else -> Sfx.DID
+                        },
+                        at,
+                    )
+                    view?.deedDone(l.props[e.prop])
                     if (e.prop == "pillow") { view?.puff(l.props["pillow"]!!.at, "feathers"); photo("p1_sideeye") }
                     if (l is Living && l.trail.length > 0.6) photo("p2_paper")
                 }
-                is Ev.Knocked -> { sound?.play(Sfx.CRASH); view?.puff(l.props[e.prop]?.pos ?: P(0.0, 0.0), if (l is Yard) "snow" else "stars") }
+                is Ev.Knocked -> {
+                    // What fell decides what is heard and seen: glass and water, a heavy thump, a cloud of flour or snow.
+                    val at = l.props[e.prop]?.pos ?: P(0.0, 0.0)
+                    val model = l.props[e.prop]?.model
+                    when (model) {
+                        "vase" -> { sound?.play(Sfx.SHATTER, at); sound?.play(Sfx.SPLASH, at); view?.puff(at, "shards"); view?.puff(at, "water") }
+                        "books", "snowman", "plant" -> { sound?.play(Sfx.THUD, at); view?.puff(at, if (model == "snowman") "snow" else if (model == "plant") "soil" else "stars") }
+                        "flour" -> { sound?.play(Sfx.THUD, at); view?.puff(at, "flour") }
+                        else -> { sound?.play(Sfx.CRASH, at); view?.puff(at, if (l is Yard) "snow" else "stars") }
+                    }
+                }
                 is Ev.Sfx -> sfx(e.name, e.at)
                 Ev.Won -> finish(true)
                 is Ev.Lost -> { say(e.why); finish(false) }
@@ -249,6 +280,26 @@ object Game {
         val second = l.time.toInt()
         if (changed || second != lastSecond) version++
         lastSecond = second
+    }
+
+    private var deedClock = 0.0
+
+    /** While a deed goes on, its sound comes again and again: tearing, chewing, scraping, digging, sweeping (v0.2). */
+    private fun deedSounds(l: com.vrgames.husky.core.Level, dt: Double) {
+        val p = l.husky.doing ?: run { deedClock = 0.0; return }
+        val (sfx, every) = when (p.kind) {
+            Kind.BITE -> Sfx.TEAR to 0.55
+            Kind.EAT -> Sfx.CHOMP to 0.35
+            Kind.PUSH -> Sfx.SCRAPE to 0.6
+            Kind.DIG -> Sfx.DIG to 0.45
+            Kind.CLEAN -> Sfx.SWEEP to 0.5
+            else -> return
+        }
+        deedClock -= dt
+        if (deedClock <= 0) {
+            deedClock = every
+            sound?.play(sfx, p.pos)
+        }
     }
 
     private fun sfx(name: String, at: P) {

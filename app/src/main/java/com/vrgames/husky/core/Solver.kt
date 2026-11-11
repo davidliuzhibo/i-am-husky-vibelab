@@ -84,7 +84,7 @@ class Solver(private val l: Level) {
         add(Step("pin", ready = { quiet(it) && l.nextTurn > 2.2 }, run = { it.tapProp("pin") }, done = { it.husky.carrying != null }))
         add(Step("balcony", ready = { quiet(it) }, run = { it.tapProp("balcony") }, done = { it.props["pin"]!!.hidden }))
         add(Step("by the shelf", run = { it.tapFloor(P(-0.3, -0.25)) }, done = { it.husky.at.dist(P(-0.3, -0.25)) < 0.07 }))
-        add(Step("frame the cat", ready = { quiet(it) && l.cat.at.dist(P(-0.6, -0.25)) < 0.12 }, run = { it.dash(P(-1.0, 0.0), 1.0) }, done = { l.framed }))
+        add(Step("frame the cat", ready = { quiet(it) && l.cat.at.dist(l.props["flour"]!!.at) < 0.12 }, run = { it.dash(P(-1.0, 0.0), 1.0) }, done = { l.framed }))
     }
 
     /** The bath: throw both decoys early, then the hiding is a policy (see [bathMove]). */

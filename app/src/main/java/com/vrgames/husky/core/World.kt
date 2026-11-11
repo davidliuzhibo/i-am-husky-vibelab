@@ -130,8 +130,11 @@ class Floor(val w: Double, val d: Double, blocks: List<Block>) {
 
     companion object {
         const val CELL = 0.025
-        /** How far the animals keep from furniture (their half width). */
-        const val PAD = 0.03
+        /**
+         * How far the animals' middles keep from furniture. v0.2: was 0.03, while the dog is about 0.15 m long, so
+         * its head and tail went into the sofa and cupboards (PICO review: clipping). Now about half its length.
+         */
+        const val PAD = 0.055
     }
 }
 

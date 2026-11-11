@@ -29,6 +29,16 @@ enum class Sfx(val file: String, val volume: Float) {
     CAMERA("camera", 0.7f),
     WIN("win", 0.9f),
     LOSE("lose", 0.7f),
+    // v0.2: each deed its own sound (tools/make_deed_sounds.py).
+    TEAR("tear", 0.75f),
+    CHOMP("chomp", 0.7f),
+    SCRAPE("scrape", 0.6f),
+    DIG("dig", 0.6f),
+    SWEEP("sweep", 0.55f),
+    SHATTER("shatter", 0.85f),
+    THUD("thud", 0.8f),
+    GRAB("grab", 0.6f),
+    SPLASH("splash", 0.7f),
 }
 
 /**
@@ -42,8 +52,15 @@ class Sound(private val parent: Entity) {
     var enabled = true
 
     /** Loads every clip; a clip that fails is skipped (logged). */
-    fun load() {
-        for (s in Sfx.entries) {
+    fun load() = loadFrom(0)
+
+    /**
+     * One clip per turn of the main loop (v0.2): with the new clips, loading them all in one go held
+     * the main thread long enough for an "app not responding" on the emulator.
+     */
+    private fun loadFrom(i: Int) {
+        val s = Sfx.entries.getOrNull(i) ?: return
+        run {
             runCatching {
                 val res = AudioResource.load(s.file, "asset://audio/${s.file}.wav", LoadType.FROM_ASSETS)
                 val e = Entity()
@@ -56,6 +73,7 @@ class Sound(private val parent: Entity) {
                 }
             }.onFailure { android.util.Log.w(TAG, "sfx ${s.file}: ${it.message}") }
         }
+        android.os.Handler(android.os.Looper.getMainLooper()).post { loadFrom(i + 1) }
     }
 
     /** Plays [s] at [at] (in [parent]'s frame; by default the middle of the parent). */

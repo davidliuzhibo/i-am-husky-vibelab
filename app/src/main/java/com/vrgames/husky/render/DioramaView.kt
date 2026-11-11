@@ -49,12 +49,25 @@ import kotlin.math.sin
  */
 class DioramaView(private val models: Map<String, Entity>, private val tex: Map<String, TextureResource>) {
     val root = Entity()
-    private var levelRoot = Entity().also { root.addChild(it) }
+    /**
+     * Everything of the level and its effects, under one node: at the table's scale normally, grown round the dog for
+     * 狗狗视角 (v0.2), where it follows the dog without turning (turning the world makes people sick).
+     */
+    private val stage = Entity().also { root.addChild(it) }
+    private var levelRoot = Entity().also { stage.addChild(it) }
     private val hits = HashMap<Entity, String>()
     private val sphere = MeshResource.createSphere(1f).shared()
-    private val feathers = Sparks("feathers", 160, sphere, pbr(color(0.97f, 0.97f, 0.95f), roughness = 1f).shared()).also { root.addChild(it.entity) }
-    private val snowPuff = Sparks("snowpuff", 160, sphere, pbr(color(0.95f, 0.97f, 1f), roughness = 1f).shared()).also { root.addChild(it.entity) }
-    private val stars = Sparks("stars", 120, sphere, glow(color(1f, 0.85f, 0.4f, 1f)).shared()).also { root.addChild(it.entity) }
+    private val feathers = Sparks("feathers", 160, sphere, pbr(color(0.97f, 0.97f, 0.95f), roughness = 1f).shared()).also { stage.addChild(it.entity) }
+    private val snowPuff = Sparks("snowpuff", 160, sphere, pbr(color(0.95f, 0.97f, 1f), roughness = 1f).shared()).also { stage.addChild(it.entity) }
+    private val stars = Sparks("stars", 120, sphere, glow(color(1f, 0.85f, 0.4f, 1f)).shared()).also { stage.addChild(it.entity) }
+    // v0.2: what each deed and each fall scatters.
+    private val shards = Sparks("shards", 60, MeshResource.createBox(Vector3(1f, 0.3f, 0.6f)).shared(), pbr(color(0.35f, 0.55f, 0.9f), metallic = 0.2f, roughness = 0.2f).shared()).also { stage.addChild(it.entity) }
+    private val waterDrops = Sparks("water", 60, sphere, pbr(color(0.6f, 0.8f, 1f, 0.8f), roughness = 0.05f).shared()).also { stage.addChild(it.entity) }
+    private val soil = Sparks("soil", 60, sphere, pbr(color(0.36f, 0.24f, 0.14f), roughness = 1f).shared()).also { stage.addChild(it.entity) }
+    private val flourDust = Sparks("flour", 120, sphere, pbr(color(0.98f, 0.97f, 0.93f), roughness = 1f).shared()).also { stage.addChild(it.entity) }
+    private val crumbs = Sparks("crumbs", 60, sphere, pbr(color(0.85f, 0.7f, 0.45f), roughness = 1f).shared()).also { stage.addChild(it.entity) }
+    private val pushDust = Sparks("pushdust", 60, sphere, pbr(color(0.75f, 0.72f, 0.66f, 0.8f), roughness = 1f).shared()).also { stage.addChild(it.entity) }
+    private var deedFxClock = 0.0
     private val propViews = HashMap<String, Entity>()
     private val propTags = HashMap<String, Entity>()
     private val pinchBoxes = HashMap<Entity, Pair<Vector3, Vector3>>()
@@ -106,7 +119,7 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
         cone = null
         dashRing = null
         scentMark = null
-        levelRoot = Entity().also { root.addChild(it) }
+        levelRoot = Entity().also { stage.addChild(it) }
         val outdoor = l is Yard || l is Forest
         // The board and its floor.
         box(Vector3(l.w.toFloat() + 0.08f, 0.06f, l.d.toFloat() + 0.08f), Vector3(0f, -0.031f, 0f), darkWood)
@@ -157,6 +170,9 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
         dashRing = model(MeshResource.createTorus(0.1f, 0.006f), dashMat).also { it.enabled = false; levelRoot.addChild(it) }
         scentMark = model(sphere, glow(color(0.7f, 1f, 0.5f, 0.8f))).also { it.enabled = false; it.setScale(0.02f); levelRoot.addChild(it) }
         receive(levelRoot)
+        // Everyone where the level starts them, at once: until a level is played nothing else places them, and on the
+        // start card (device v0.2.2) the dog and the owner (out at work in the first room) stood inside the tea table.
+        sync(l, false, null)
     }
 
     fun tileCenter(l: Level, i: Int, j: Int) = P(-l.w / 2 + (i + 0.5) * TILE, -l.d / 2 + (j + 0.5) * TILE)
@@ -174,7 +190,9 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
             null
         }
         if (id == "husky" || id == "roe") {
-            pinchable(holder, id, Vector3(0.16f, height, 0.16f), Vector3(0f, height / 2, 0f))
+            val w = if (id == "husky") Looks.DOG_W.toFloat() else 0.16f
+            val h = if (id == "husky") Looks.DOG_H.toFloat() else height
+            pinchable(holder, id, Vector3(w, h, w), Vector3(0f, h / 2, 0f))
         }
         levelRoot.addChild(holder)
         chars[id] = holder to anim
@@ -464,7 +482,10 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
         // Things.
         for (p in l.props.values) {
             val e = propViews[p.id] ?: continue
-            e.setPos(Vector3(p.pos.x.toFloat(), if (l.husky.carrying === p) 0.07f else p.lift.toFloat(), p.pos.z.toFloat()))
+            val inMouth = l.husky.carrying === p
+            e.setPos(Vector3(p.pos.x.toFloat(), if (inMouth) MOUTH_Y else p.lift.toFloat(), p.pos.z.toFloat()))
+            // Held crosswise in the mouth, turning with the dog (v0.2: it used to sit inside the head).
+            if (inMouth) e.transform().eulerAngles = EulerAngles(0f, yawOf(l.husky.heading) + 90f, 0f)
             val gone = (p.kind == Kind.CLEAN && p.done) || (p.hidden && p.kind == Kind.CARRY) || (p.kind == Kind.EAT && p.done) || (p.kind == Kind.DIG && p.done && p.model == "snowbank")
             if (e.enabled == gone) e.enabled = !gone
             propTags[p.id]?.let { t ->
@@ -476,6 +497,7 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
             if (p.kind == Kind.DIG && p.done && p.model == "mound") e.transform().setScaleVector(Vector3(1f, 0.3f, 1f))
             if (p.kind == Kind.GATE && p.done) e.transform().setScaleVector(Vector3(1.2f))
         }
+        deedInProgress(l, syncDt())
         if (l is Forest) propViews["log"]?.let { if (it.enabled != l.bridge) it.enabled = l.bridge }
         if (l is Kitchen && l.framed) propViews["flour"]?.let { it.setPos(Vector3(l.cat.at.x.toFloat(), 0.08f, l.cat.at.z.toFloat())) }
         // The paper trail.
@@ -532,7 +554,7 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
             levelRoot.destroy()
             hits.clear(); pinchBoxes.clear(); propViews.clear(); propTags.clear(); chars.clear(); trailPool.clear(); dropMarks.clear()
             cone = null; dashRing = null; scentMark = null
-            levelRoot = Entity().also { root.addChild(it) }
+            levelRoot = Entity().also { stage.addChild(it) }
             box(Vector3(1.68f, 0.06f, 1.08f), Vector3(0f, -0.031f, 0f), darkWood)
             levelRoot.addChild(model(quad(1.6f, 1.0f, 2.5f), tex["snow"]?.let { textured(it, 0.45f) } ?: snowMat).apply {
                 setPos(Vector3(0f, 0.001f, 0f)); transform().eulerAngles = EulerAngles(-90f, 0f, 0f)
@@ -569,18 +591,104 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
         return kotlin.math.atan2(dx, -dz)
     }
 
+    /** A deed finished: a last burst of what it scattered (the pillow's feathers are puffed by the game). */
+    fun deedDone(p: com.vrgames.husky.core.Prop?) {
+        p ?: return
+        val v = Vec3(p.pos.x, 0.03, p.pos.z)
+        if (p.kind == Kind.BITE) propViews[p.id]?.transform()?.eulerAngles = EulerAngles(0f, 0f, 0f)
+        when (p.kind) {
+            Kind.EAT -> crumbs.emit(v + Vec3(0.0, p.lift, 0.0), 14, 0.15, 0.9, 0.005f, Vec3(0.0, -0.2, 0.0))
+            Kind.DIG -> snowPuff.emit(v, 26, 0.35, 1.0, 0.009f, Vec3(0.0, 0.1, 0.0))
+            Kind.CLEAN -> stars.emit(v + Vec3(0.0, 0.03, 0.0), 14, 0.2, 0.8, 0.005f)
+            Kind.PUSH -> pushDust.emit(v, 12, 0.15, 0.8, 0.008f, Vec3(0.0, 0.05, 0.0))
+            else -> Unit
+        }
+    }
+
+    /**
+     * While the dog is at a deed, the thing shows it (v0.2): a cushion jerks and sheds feathers, food gets smaller and
+     * drops crumbs, a pushed stool raises dust, snow sprays from digging, tidying leaves a sparkle.
+     */
+    private fun deedInProgress(l: Level, dt: Double) {
+        val p = l.husky.doing ?: return
+        val e = propViews[p.id] ?: return
+        // How far along the deed is (a deed broken off keeps its progress: doingLeft then starts lower).
+        val k = ((p.seconds - l.husky.doingLeft) / p.seconds.coerceAtLeast(0.1)).coerceIn(0.0, 1.0)
+        val v = Vec3(p.pos.x, 0.03 + p.lift, p.pos.z)
+        deedFxClock -= dt
+        val burst = deedFxClock <= 0
+        if (burst) deedFxClock = 0.25
+        when (p.kind) {
+            Kind.BITE -> {
+                val jerk = (sin(clock * 30) * 6 * (1 - k * 0.5)).toFloat()
+                e.transform().eulerAngles = EulerAngles(0f, jerk, jerk * 0.5f)
+                if (burst) feathers.emit(v + Vec3(0.0, 0.04, 0.0), 6, 0.25, 1.8, 0.007f, Vec3(0.0, 0.12, 0.0))
+            }
+            Kind.EAT -> {
+                e.transform().setScaleVector(Vector3((1.0 - 0.6 * k).toFloat()))
+                if (burst) crumbs.emit(v, 3, 0.1, 0.7, 0.004f, Vec3(0.0, -0.15, 0.0))
+            }
+            Kind.PUSH -> if (burst) pushDust.emit(Vec3(p.pos.x, 0.01, p.pos.z), 3, 0.08, 0.7, 0.007f, Vec3(0.0, 0.04, 0.0))
+            Kind.DIG -> if (burst) snowPuff.emit(Vec3(p.pos.x, 0.02, p.pos.z), 5, 0.25, 0.8, 0.007f, Vec3(0.0, 0.12, 0.0))
+            Kind.CLEAN -> if (burst) stars.emit(v, 2, 0.1, 0.5, 0.004f)
+            else -> Unit
+        }
+    }
+
     fun puff(at: P, kind: String) {
         val v = Vec3(at.x, 0.04, at.z)
         when (kind) {
             "feathers" -> feathers.emit(v, 40, 0.4, 2.5, 0.008f, Vec3(0.0, 0.15, 0.0))
             "snow" -> snowPuff.emit(v, 20, 0.3, 1.0, 0.008f, Vec3(0.0, 0.1, 0.0))
+            "shards" -> shards.emit(v, 18, 0.35, 1.4, 0.008f, Vec3(0.0, -0.2, 0.0))
+            "water" -> waterDrops.emit(v, 24, 0.3, 0.9, 0.006f, Vec3(0.0, -0.25, 0.0))
+            "soil" -> soil.emit(v, 22, 0.25, 1.2, 0.007f, Vec3(0.0, -0.2, 0.0))
+            "flour" -> flourDust.emit(v + Vec3(0.0, 0.03, 0.0), 60, 0.25, 2.2, 0.012f, Vec3(0.0, 0.05, 0.0))
             else -> stars.emit(v + Vec3(0.0, 0.08, 0.0), 16, 0.3, 0.8, 0.006f)
         }
+    }
+
+    private var lastSyncClock = 0.0
+
+    // ---- 狗狗视角 ----
+
+    /** How far the dog view has grown in (0 table, 1 dog view): eased both ways. */
+    private var dogK = 0.0
+    private var follow = Vec3(0.0, 0.0, 0.0)
+
+    /**
+     * Grows the level [DOG_SCALE] times round [l]'s dog, which then stands about a metre in front of the player at
+     * floor level, half as tall as a person; [on] false brings the table back. The world only slides, never turns.
+     */
+    fun dogView(l: Level, on: Boolean, dt: Double) {
+        val target = if (on) 1.0 else 0.0
+        if (dogK == target && !on) return
+        dogK = if (dogK < target) minOf(target, dogK + dt / DOG_EASE_S) else maxOf(target, dogK - dt / DOG_EASE_S)
+        val e = dogK * dogK * (3 - 2 * dogK)
+        val s = 1.0 + (DOG_SCALE - 1.0) * e
+        // Follow the dog gently, so its small hops do not shake the world.
+        val dog = Vec3(l.husky.at.x, 0.0, l.husky.at.z)
+        val f = (dt * 3.0).coerceAtMost(1.0)
+        follow = if (dogK <= 0.0) dog else Vec3(follow.x + (dog.x - follow.x) * f, 0.0, follow.z + (dog.z - follow.z) * f)
+        // The player's feet in the diorama's frame are FLOOR_DROP below and PLAYER_Z toward them; the dog goes a metre ahead.
+        val tx = 0.0
+        val ty = -FLOOR_DROP * e
+        val tz = (PLAYER_Z - DOG_AHEAD) * e
+        stage.transform().setScaleVector(Vector3(s.toFloat()))
+        stage.setPos(Vector3((tx - follow.x * s * e).toFloat(), ty.toFloat(), (tz - follow.z * s * e).toFloat()))
+    }
+
+    /** Seconds since the last [sync] (it runs once a frame, after [frame]). */
+    private fun syncDt(): Double {
+        val d = (clock - lastSyncClock).coerceIn(0.0, 0.1)
+        lastSyncClock = clock
+        return d
     }
 
     fun frame(dt: Double) {
         clock += dt
         feathers.update(dt, 2.5)
+        shards.update(dt, 1.2); waterDrops.update(dt, 1.5); soil.update(dt, 1.5); flourDust.update(dt, 2.5); crumbs.update(dt, 1.5); pushDust.update(dt, 2.0)
         snowPuff.update(dt)
         stars.update(dt)
     }
@@ -611,5 +719,14 @@ class DioramaView(private val models: Map<String, Entity>, private val tex: Map<
 
         /** Turns for AI models that do not face +z (checked on their previews). */
         val MODEL_YAW = mapOf<String, Double>()
+        /** 狗狗视角: the level grown this much (the dog about 1.2 m tall), eased in and out over [DOG_EASE_S]. */
+        const val DOG_SCALE = 8.0
+        const val DOG_EASE_S = 1.2
+        /** The diorama's top is this far above the floor, and the player this far toward them from its middle. */
+        const val FLOOR_DROP = 0.45
+        const val PLAYER_Z = 1.15
+        const val DOG_AHEAD = 1.1
+        /** The dog's mouth above the floor (the dog is drawn 0.15 m tall). */
+        const val MOUTH_Y = 0.075f
     }
 }

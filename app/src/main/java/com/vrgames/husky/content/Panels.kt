@@ -183,6 +183,7 @@ fun ActionsPanel(c: PhysicalLengthConverter) {
             if (l is Yard) Pill(c, "闻一闻", Mint) { Game.sniff() }
         }
         if (l is Forest) Pill(c, if (l.active == Who.HUSKY) "换傻狍子" else "换二哈", Mint) { Game.switch() }
+        Pill(c, if (Game.dogView) "回到桌上" else "狗狗视角", Sky) { Game.toggleDogView() }
         if (l.mainAt >= 0) CallToAction(c, "收工！", Mint) { Game.wrapUp() }
     }
 }

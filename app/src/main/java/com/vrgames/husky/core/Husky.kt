@@ -72,6 +72,8 @@ class Prop(
     var progress = 0.0
     /** Finished with for good, though not [done] in the ordinary way (the toilet roll put down). */
     var retired = false
+    /** The top of the furniture it stands on, above its own foot (0 on the floor): its name and box clear it. */
+    var base = 0.0
 }
 
 /** The box a hand's ray pinches, around a thing's foot: [w]×[h]×[d], its middle [cy] above the foot. */
@@ -94,6 +96,10 @@ object Looks {
     private val CODED_BOTTOM = mapOf("pillow" to 0.05, "dumplings" to 0.055)
     private const val MIN_WIDE = 0.13
     private const val MIN_TALL = 0.07
+    private const val MIN_TALL_UP = 0.045
+    /** The dog's own pinch box (around its feet): [DOG_W] square, [DOG_H] tall. */
+    const val DOG_W = 0.1
+    const val DOG_H = 0.11
     const val TAG_H = 0.03
     const val TAG_GAP = 0.035
     private const val PLACE_TALL = 0.12
@@ -107,7 +113,7 @@ object Looks {
     /** How wide [p]'s pinchable name tag is. */
     fun tagWide(p: Prop) = p.label.length * TAG_H * 0.72 + TAG_H * 0.7 + 0.02
     /** How high above [p]'s foot the middle of its tag floats. */
-    fun tagY(p: Prop) = top(p) + TAG_GAP
+    fun tagY(p: Prop) = max(top(p), p.base) + TAG_GAP
 
     /** The box to pinch [p] by, or null for what is only in the way and has no name. */
     fun hitBox(p: Prop): HitBox? {
@@ -118,7 +124,8 @@ object Looks {
         val bottom = CODED_BOTTOM[p.model] ?: 0.0
         // A place with nothing standing on it (the gap in the sofa) is pinched by the air above it;
         // a flag is a stick, and must not stand in the way of what is behind it.
-        val tall = if (p.kind == Kind.DROP && p.model.isEmpty()) PLACE_TALL else max(top - bottom, MIN_TALL)
+        // Small things up on furniture keep a low box: a tall one hid what is behind them (the baozi before the sofa gap).
+        val tall = if (p.kind == Kind.DROP && p.model.isEmpty()) max(PLACE_TALL, p.base + 0.05) else max(top - bottom, if (p.lift > 0) MIN_TALL_UP else MIN_TALL)
         val wide = if (p.kind == Kind.GATE) p.size * 0.8 else max(p.size, MIN_WIDE)
         return HitBox(wide, tall, wide, bottom + tall / 2)
     }
@@ -214,6 +221,9 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
     /** Builds the floor from the props' footprints (call after adding them). */
     fun build(start: P) {
         floor = Floor(w, d, props.values.mapNotNull { it.block })
+        // What stands on furniture (the pillow and the gap on the sofa): v0.2.2's names sank into it.
+        for (p in props.values) if (p.kind != Kind.SOLID) p.base = props.values.filter { q -> q !== p && q.kind == Kind.SOLID && q.block?.has(p.pos) == true }
+            .maxOfOrNull { Looks.top(it) - p.lift }?.coerceAtLeast(0.0) ?: 0.0
         husky = Animal(Who.HUSKY, floor.nearestOpen(start))
     }
 
@@ -241,24 +251,44 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
      * The player's pinch on the floor at [p]. A hand's ray wavers more than these things are wide, so
      * a near miss counts as the thing meant.
      */
-    fun tapAt(p: P) {
+    fun tapAt(p: P, eye: Vec3? = null) {
         val a = animal
         if (over) return
         if (a.busy) {
-            queued = { tapAt(p) }
+            queued = { tapAt(p, eye) }
             return
         }
-        val t = aimedAt(p)
+        val t = aimedAt(p, eye)
         if (t != null) tapProp(t.id) else tapFloor(p)
     }
 
     /** What a pinch at [p] means: the nearest thing there that can be dealt with now, if any. */
-    fun aimedAt(p: P): Prop? {
+    fun aimedAt(p: P, eye: Vec3? = null): Prop? {
         val a = animal
-        return props.values.filter { q ->
-            q !== a.carrying && q.pos.dist(p) <= max(MAGNET, q.size / 2 + 0.05) && magnetic(q) &&
-                (if (a.carrying != null) q.kind == Kind.DROP else q.kind != Kind.SOLID && meansSomething(a, q))
-        }.minByOrNull { it.pos.dist(p) }
+        val wanted = props.values.filter { q ->
+            q !== a.carrying && magnetic(q) && (if (a.carrying != null) q.kind == Kind.DROP else q.kind != Kind.SOLID && meansSomething(a, q))
+        }
+        eye?.let { e -> aimedAlong(wanted, e, p)?.let { return it } }
+        return wanted.filter { q -> q.pos.dist(p) <= max(MAGNET, q.size / 2 + 0.05) }.minByOrNull { it.pos.dist(p) }
+    }
+
+    /**
+     * A pinch that reached the floor at [p]: the thing the line from the player's [eye] to there passes close by.
+     * A ray from a hand in the lap is shallow and grazes past a small or thin thing to land well behind it (a flag,
+     * the gap in the sofa): v0.2.2 read that as the floor, and the dog ran off to it.
+     */
+    private fun aimedAlong(wanted: List<Prop>, eye: Vec3, p: P): Prop? {
+        val end = Vec3(p.x, 0.0, p.z)
+        val d = end - eye
+        val len2 = d.dot(d).coerceAtLeast(1e-9)
+        return wanted.mapNotNull { q ->
+            val b = Looks.hitBox(q) ?: return@mapNotNull null
+            val c = Vec3(q.pos.x, q.lift + b.cy, q.pos.z)
+            val t = ((c - eye).dot(d) / len2).coerceIn(0.0, 1.0)
+            val miss = (eye + d * t).distanceTo(c)
+            val reach = ALONG + max(b.w, b.d) / 2
+            if (miss <= reach) q to miss / reach else null
+        }.minByOrNull { it.second }?.first
     }
 
     /** A pinch made while the animal was busy: done as soon as it is free, or it feels ignored. */
@@ -343,6 +373,12 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
             go(a, p.spot) { drop(a, c, p.at, p) }
             return
         }
+        // Carrying something, a pinch that lands on a thing right beside a place to put it down means that place
+        // (device v0.2.2: with the remote in its mouth, the pinch at the sofa gap caught the pillow beside it).
+        if (c != null) dropBeside(p)?.let { d ->
+            go(a, d.spot) { drop(a, c, d.at, d) }
+            return
+        }
         if (!can(a, p)) return
         if (p.kind == Kind.KNOCK) {
             knock(a, p)
@@ -350,6 +386,9 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
         }
         go(a, p.spot) { start(a, p) }
     }
+
+    /** An open place to put something down within [MAGNET] of [p], the nearest one. */
+    fun dropBeside(p: Prop): Prop? = props.values.filter { it.kind == Kind.DROP && !it.done && it.pos.dist(p.pos) <= MAGNET }.minByOrNull { it.pos.dist(p.pos) }
 
     /**
      * Pointing at furniture means what is on it (the pillow on the sofa, the baozi on the table); with
@@ -685,7 +724,8 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
                 a.at = a.at + delta.norm() * stepLen
                 stepped(a)
             }
-            a.carrying?.let { it.pos = a.at + dirOf(a.heading) * 0.06 }
+            // In the mouth: past the tip of the nose, not inside the head (v0.2).
+            a.carrying?.let { it.pos = a.at + dirOf(a.heading) * CARRY_AHEAD }
         }
     }
 
@@ -784,6 +824,8 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
 
     companion object {
         const val STEP = 0.05
+        /** A carried thing hangs this far ahead of the dog's middle (its nose is about 0.077 ahead). */
+        const val CARRY_AHEAD = 0.095
         const val RUN_SPEED = 0.32
         const val ROE_SPEED = 0.28
         const val DASH_SPEED = 0.9
@@ -798,6 +840,8 @@ abstract class Level(val id: String, val title: String, val intro: String, val w
         const val TURN_FIRST = 0.5
         /** How near a pinch on the floor counts as the thing (a little over the ray's waver at the far wall). */
         const val MAGNET = 0.16
+        /** How near the line of sight to a pinch on the floor a thing must be to be what was meant (beyond its box). */
+        const val ALONG = 0.04
         const val ON_FURNITURE = 0.06
         const val RUN_UP = 0.22
     }

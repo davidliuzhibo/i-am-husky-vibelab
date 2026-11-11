@@ -55,6 +55,7 @@ object AutoPilot {
             "grant" -> Game.grant(id?.toIntOrNull() ?: 3)
             "dream" -> Game.dream()
             "innocent" -> Game.innocent()
+            "dog" -> if ((id == "off") == Game.dogView) Game.toggleDogView()
             "view" -> Game.debugView = id?.takeIf { it != "reset" }
             "open" -> Game.debugOpen = id
             "reset" -> { main.removeCallbacksAndMessages(null); Game.restart() }
